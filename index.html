@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Checkers Game</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; background: url(https://i.redd.it/hy4mng2u9c431.png); }
+        #board { display: grid; grid-template: repeat(8, 60px) / repeat(8, 60px); border: 3px solid #333; }
+        .cell {
+            width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;
+            font-size: 36px; cursor: pointer; user-select: none;
+        }
+        .white { background: #fd9c00; }
+        .black { background: #744100; }
+        .selected { outline: 3px solid #2196f3; }
+        .move { background: #aee571 !important; }
+        .piece-img { width: 40px; height: 40px; border-radius: 50%; }
+        .king { border: 2px solid gold; }
+        .modal {
+            display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.5); justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #fff; padding: 30px 40px; border-radius: 10px; text-align: center; font-size: 1.5em;
+        }
+        .modal button {
+            margin-top: 20px; padding: 10px 25px; font-size: 1em; border-radius: 6px; border: none; background: #2196f3; color: #fff; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="board"></div>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div id="win-message"></div>
+            <button onclick="restartGame()">Restart</button>
+        </div>
+    </div>
+    <script>
+        // Piece images
+        const pieceImages = {
+            'w': 'https://d31sxl6qgne2yj.cloudfront.net/wordpress/wp-content/uploads/20190121140627/Minecraft-Creeper-Head.jpg',
+            'b': 'https://d31sxl6qgne2yj.cloudfront.net/wordpress/wp-content/uploads/20190121140743/Minecraft-Wither-Skeleton-Head.jpg',
+            'W': 'https://d31sxl6qgne2yj.cloudfront.net/wordpress/wp-content/uploads/20190121140627/Minecraft-Creeper-Head.jpg',
+            'B': 'https://d31sxl6qgne2yj.cloudfront.net/wordpress/wp-content/uploads/20190121140743/Minecraft-Wither-Skeleton-Head.jpg'
+        };
+
+        let board = [];
+        for (let y = 0; y < 8; y++) {
+            board[y] = [];
+            for (let x = 0; x < 8; x++) {
+                if ((x + y) % 2 === 1 && y < 3) board[y][x] = 'b';
+                else if ((x + y) % 2 === 1 && y > 4) board[y][x] = 'w';
+                else board[y][x] = '';
+            }
+        }
+        let selected = null;
+        let turn = 'w'; 
+
+        const boardDiv = document.getElementById('board');
+
+        function renderBoard() {
+            boardDiv.innerHTML = '';
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell ' + ((x + y) % 2 === 0 ? 'white' : 'black');
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    if (board[y][x]) {
+                        const img = document.createElement('img');
+                        img.src = pieceImages[board[y][x]];
+                        img.className = 'piece-img' + (isKing(board[y][x]) ? ' king' : '');
+                        img.draggable = false;
+                        cell.appendChild(img);
+                    }
+                    if (selected && selected.x === x && selected.y === y) cell.classList.add('selected');
+                    if (selected && isValidMove(selected, {x, y})) cell.classList.add('move');
+                    cell.onclick = () => onCellClick(x, y);
+                    boardDiv.appendChild(cell);
+                }
+            }
+        }
+
+        function isKing(piece) {
+            return piece === 'W' || piece === 'B';
+        }
+
+        function checkWin() {
+            let w = 0, b = 0;
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    if (board[y][x] === 'w' || board[y][x] === 'W') w++;
+                    if (board[y][x] === 'b' || board[y][x] === 'B') b++;
+                }
+            }
+            if (w === 0) showWin("Black Wins!");
+            if (b === 0) showWin("White Wins!");
+        }
+
+        function showWin(msg) {
+            document.getElementById('win-message').textContent = msg;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function restartGame() {
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    if ((x + y) % 2 === 1 && y < 3) board[y][x] = 'b';
+                    else if ((x + y) % 2 === 1 && y > 4) board[y][x] = 'w';
+                    else board[y][x] = '';
+                }
+            }
+            selected = null;
+            turn = 'w';
+            document.getElementById('modal').style.display = 'none';
+            renderBoard();
+        }
+
+        const tapSound = new Audio("https://cdn.pixabay.com/audio/2022/07/26/audio_124bfa4c3a.mp3"); 
+
+        function playTap() {
+            tapSound.currentTime = 0;
+            tapSound.play();
+        }
+
+        function onCellClick(x, y) {
+            const piece = board[y][x];
+            if (selected) {
+                if (isValidMove(selected, {x, y})) {
+                    movePiece(selected, {x, y});
+                    playTap(); 
+                    turn = turn === 'w' ? 'b' : 'w';
+                    selected = null;
+                    checkWin();
+                    renderBoard();
+                    if (turn === 'b') setTimeout(aiMove, 400);
+                    return;
+                } else if (piece && isOwnPiece(piece)) {
+                    selected = {x, y};
+                } else {
+                    selected = null;
+                }
+            } else if (piece && isOwnPiece(piece)) {
+                selected = {x, y};
+            }
+            renderBoard();
+        }
+
+        function isOwnPiece(piece) {
+            if (!piece) return false;
+            return (turn === 'w' && (piece === 'w' || piece === 'W')) ||
+                   (turn === 'b' && (piece === 'b' || piece === 'B'));
+        }
+
+        function isValidMove(from, to) {
+            const piece = board[from.y][from.x];
+            const dx = to.x - from.x, dy = to.y - from.y;
+            if (board[to.y][to.x]) return false;
+            if ((to.x + to.y) % 2 === 0) return false; 
+
+            if (!isKing(piece)) {
+                if (piece === 'w' && dy === -1 && Math.abs(dx) === 1) return true;
+                if (piece === 'b' && dy === 1 && Math.abs(dx) === 1) return true;
+                if (Math.abs(dx) === 2 && Math.abs(dy) === 2) {
+                    const midX = from.x + dx / 2, midY = from.y + dy / 2;
+                    const midPiece = board[midY][midX];
+                    if (midPiece && !isOwnPiece(midPiece)) return true;
+                }
+            } else {
+                if (Math.abs(dx) === Math.abs(dy)) {
+                    let stepX = dx > 0 ? 1 : -1;
+                    let stepY = dy > 0 ? 1 : -1;
+                    let x = from.x + stepX, y = from.y + stepY;
+                    let enemyFound = false;
+                    while (x !== to.x && y !== to.y) {
+                        if (board[y][x]) {
+                            if (!isOwnPiece(board[y][x]) && !enemyFound) {
+                                enemyFound = true;
+                            } else {
+                                return false;
+                            }
+                        }
+                        x += stepX;
+                        y += stepY;
+                    }
+                    if (!enemyFound) return true;
+                    if (enemyFound) return true;
+                }
+            }
+            return false;
+        }
+
+        function movePiece(from, to) {
+            const piece = board[from.y][from.x];
+            const dx = to.x - from.x, dy = to.y - from.y;
+            if (!isKing(piece) && Math.abs(dx) === 2 && Math.abs(dy) === 2) {
+                const midX = from.x + dx / 2, midY = from.y + dy / 2;
+                board[midY][midX] = '';
+            }
+            if (isKing(piece) && Math.abs(dx) === Math.abs(dy)) {
+                let stepX = dx > 0 ? 1 : -1;
+                let stepY = dy > 0 ? 1 : -1;
+                let x = from.x + stepX, y = from.y + stepY;
+                while (x !== to.x && y !== to.y) {
+                    if (board[y][x] && !isOwnPiece(board[y][x])) {
+                        board[y][x] = '';
+                        break;
+                    }
+                    x += stepX;
+                    y += stepY;
+                }
+            }
+            board[to.y][to.x] = piece;
+            board[from.y][from.x] = '';
+            if (piece === 'w' && to.y === 0) board[to.y][to.x] = 'W';
+            if (piece === 'b' && to.y === 7) board[to.y][to.x] = 'B';
+        }
+
+        function aiMove() {
+            let moves = [];
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x];
+                    if (piece && (piece === 'b' || piece === 'B')) {
+                        for (let dy = -2; dy <= 2; dy++) {
+                            for (let dx = -2; dx <= 2; dx++) {
+                                let to = {x: x + dx, y: y + dy};
+                                if (to.x >= 0 && to.x < 8 && to.y >= 0 && to.y < 8) {
+                                    if (isValidMove({x, y}, to)) {
+                                        moves.push({from: {x, y}, to});
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (moves.length > 0) {
+                let capture = moves.find(m => Math.abs(m.from.x - m.to.x) === 2);
+                let move = capture || moves[0];
+                movePiece(move.from, move.to);
+                playTap();
+                turn = 'w';
+                checkWin();
+                renderBoard();
+            }
+        }
+
+        renderBoard();
+    </script>
+</body>
+</html>
